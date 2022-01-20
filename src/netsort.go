@@ -90,9 +90,9 @@ func openConnections(scs ServerConfigs, myServerId int) map[int]net.Conn{ // I o
 			}
 			if c != nil{
 				openConnectionsMap[scs.Servers[i].ServerId] = c
-				log.Println("Server" + strconv.Itoa(myServerId) + " successfully connected to " + strconv.Itoa(scs.Servers[i].ServerId))
+				//log.Println("Server" + strconv.Itoa(myServerId) + " successfully connected to " + strconv.Itoa(scs.Servers[i].ServerId))
 			} else {
-				log.Println("Server" + strconv.Itoa(myServerId) + " unable to connect to " + strconv.Itoa(scs.Servers[i].ServerId))
+				//log.Println("Server" + strconv.Itoa(myServerId) + " unable to connect to " + strconv.Itoa(scs.Servers[i].ServerId))
 			}
 		}
 	}
@@ -124,34 +124,37 @@ func handleConnection(conn net.Conn, myServerId int, recCh chan<- []byte, finCh 
 			}
 			log.Panicln(err)
 		}
-		log.Println("Server" + strconv.Itoa(myServerId) + " received a record")
+		//log.Println("Server" + strconv.Itoa(myServerId) + " received a record")
 		copy_buf := make([]byte, RecordSize)
 		copy(copy_buf, buf)
+		if n!= 100 {
+			log.Println("less than 100B record")
+		}
 		recCh <- copy_buf[:n]
 	}
 }
-func consolidateFileRecords(numOfClients int, recCh <-chan []byte, finCh <-chan int) fileRecords{
+func consolidateFileRecords(numOfClients int, recCh <-chan []byte, finCh <-chan int) {
 	var numOfClientsCompleted int
 	var receivedFileRecords fileRecords
 	numOfClientsCompleted = 0
 	for{
-		log.Println("numOfClientsCompleted", numOfClientsCompleted)
 		if numOfClientsCompleted == numOfClients{
+			log.Println("hi. exiting.")
 			break
 		}
 		select {
 			case fin := <-finCh:
-				numOfClientsCompleted = numOfClientsCompleted + fin	
+				numOfClientsCompleted = numOfClientsCompleted + fin
+				log.Println("numOfClientsCompleted", numOfClientsCompleted)	
 			
 			case buf := <-recCh:
 				copy_buf := make([]byte, RecordSize)
 				copy(copy_buf, buf)
 				receivedFileRecords = append(receivedFileRecords, record{copy_buf})
-				log.Println("Added to received FR")
+				//log.Println("Added to received FR")
 		}
 	}
 	myFileRecords = append(myFileRecords, receivedFileRecords...)
-	return myFileRecords
 }
 func sendFileRecords(openConnectionsMap map[int]net.Conn, numOfServers int, myServerId int){
 	n_partitionBits := int(math.Log2(float64(numOfServers))) // assumed that fewer than 256 servers there. Otherwise, endianness needs to be taken care of 
@@ -178,6 +181,9 @@ func sendFileRecords(openConnectionsMap map[int]net.Conn, numOfServers int, mySe
 		} else {
 			conn := openConnectionsMap[int(serverKey)]
 			conn.Write(copy_buf)
+			if len(copy_buf) != 100{
+				log.Println("length not 100B for my own record")
+			}
 		}
 	}
 	for i:=0; i<numOfServers; i++{
@@ -217,10 +223,10 @@ func main() {
 	openConnectionsMap := openConnections(scs, myServerId)
 	
 	// send filerecords
-	go sendFileRecords(openConnectionsMap, numOfClients+1, myServerId)
+	sendFileRecords(openConnectionsMap, numOfClients+1, myServerId)
 	
 	// consolidate file records
-	myFileRecords = consolidateFileRecords(numOfClients, recCh, finCh)	
+	consolidateFileRecords(numOfClients, recCh, finCh)	
 
 	//sort file records
 	sort.Stable(fileRecords(myFileRecords))
