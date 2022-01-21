@@ -74,9 +74,8 @@ unless you want to retain references between copies.
 Golang provides no builtin deep copy functionality so you'll have 
 to implement your own or use one of the many freely available libraries that provide it.
 */
-func readAndPartitionData(numOfServers int) []fileRecords {
-	partitionedFileRecords := make([]fileRecords, numOfServers)
-	n_partitionBits := int(math.Log2(float64(numOfServers))) // assumed that fewer than 256 servers there. Otherwise, endianness needs to be taken care of 
+func readData() fileRecords{
+	var readFileRecords fileRecords
 	inputFile, err := os.Open(os.Args[2])
 	if err != nil{
 		log.Fatal(err)
@@ -91,13 +90,57 @@ func readAndPartitionData(numOfServers int) []fileRecords {
 			}
 			break
 		}
+		if bytesRead != 100{
+			log.Fatal("didnt read 100B from file")
+		}
 		copy_buf := make([]byte, RecordSize)
 		copy(copy_buf, buf) // do not pass buf every time. otherwise, you keep overwriting buf and your slice has memory ref to it. 
 						 // hence, if buf is appended each time, at the end all inputFileRecords will have value equal to last entered element.
-		serverKey := uint8(copy_buf[0] >> (8 - n_partitionBits))
-		partitionedFileRecords[int(serverKey)] = append(partitionedFileRecords[int(serverKey)], record{copy_buf[:bytesRead]})
+		readFileRecords = append(readFileRecords, record{copy_buf[:bytesRead]})
 	}
-	return partitionedFileRecords
+	return readFileRecords
+	// partitionedFileRecords := make(map[int]fileRecords)
+	// for i:= 0; i<numOfServers; i++{
+	// 	partitionedFileRecords[i] = fileRecords{}
+	// }
+	// n_partitionBits := int(math.Log2(float64(numOfServers))) // assumed that fewer than 256 servers there. Otherwise, endianness needs to be taken care of 
+	// n_partitionBits := int(math.Log2(float64(numOfServers))) // assumed that fewer than 256 servers there. Otherwise, endianness needs to be taken care of 
+	// inputFile, err := os.Open(os.Args[2])
+	// if err != nil{
+	// 	log.Fatal(err)
+	// }
+	// defer inputFile.Close()
+	// buf := make([]byte, RecordSize)
+	// for {
+	// 	bytesRead, err := inputFile.Read(buf)
+	// 	if err != nil{
+	// 		if err != io.EOF { // even though the last chunk may be less than 100B, the last chunk is read successfully and then when solely EOF is encountered, we get error.EOF
+	// 			log.Panicln(err)
+	// 		}
+	// 		break
+	// 	}
+	// 	copy_buf := make([]byte, RecordSize)
+	// 	copy(copy_buf, buf[:bytesRead]) // do not pass buf every time. otherwise, you keep overwriting buf and your slice has memory ref to it. 
+	// 					 // hence, if buf is appended each time, at the end all inputFileRecords will have value equal to last entered element.
+	// 	serverKey := uint8(copy_buf[0] >> (8 - n_partitionBits))
+	// 	partitionedFileRecords[int(serverKey)] = append(partitionedFileRecords[int(serverKey)], record{copy_buf})
+	// }
+	//return partitionedFileRecords
+}
+func partitionData(numOfServers int, readFileRecords fileRecords)map[int]fileRecords{
+	partitionedFileRecords := make(map[int]fileRecords)
+	for i:= 0; i<numOfServers; i++{
+		partitionedFileRecords[i] = fileRecords{}
+	}
+	n_partitionBits := int(math.Log2(float64(numOfServers))) // assumed that fewer than 256 servers there. Otherwise, endianness needs to be taken care of 
+	for i:=0; i<len(readFileRecords); i++{
+		copy_buf := make([]byte, RecordSize)
+		copy(copy_buf, readFileRecords[i].data) // do not pass buf every time. otherwise, you keep overwriting buf and your slice has memory ref to it. 
+						 // hence, if buf is appended each time, at the end all inputFileRecords will have value equal to last entered element.
+		serverKey := uint8(copy_buf[0] >> (8 - n_partitionBits))
+		partitionedFileRecords[int(serverKey)] = append(partitionedFileRecords[int(serverKey)], record{copy_buf[:100]})
+	}
+	return partitionedFileRecords	
 }
 func openConnections(scs ServerConfigs, myServerId int) map[int]net.Conn{ // I only want to send records through these connections
 	openConnectionsMap := make(map[int]net.Conn)
@@ -140,9 +183,9 @@ func listenForConnections(scs ServerConfigs, myServerId int, recCh chan<- []byte
 }
 
 func handleConnection(conn net.Conn, myServerId int, recCh chan<- []byte, finCh chan<- int){
-	buf := make([]byte, RecordSize)
 	for{
-		n, err := conn.Read(buf) // blocks until some read is done
+		buf := make([]byte, RecordSize)
+		n, err := io.ReadFull(conn, buf) // blocks until some read is done
 		if err != nil{
 			if err != io.EOF{
 				log.Panicln(err)
@@ -153,13 +196,16 @@ func handleConnection(conn net.Conn, myServerId int, recCh chan<- []byte, finCh 
 		}
 		//log.Println("Server" + strconv.Itoa(myServerId) + " received a record")
 		copy_buf := make([]byte, RecordSize)
-		copy(copy_buf, buf)
-		recCh <- copy_buf[:n]
+		copy(copy_buf, buf[:n])
+		if n!= 100 {
+			log.Fatalln("not 100B", n)
+		}
+		recCh <- copy_buf
 	}
 }
-func consolidateFileRecords(numOfClients int, recCh <-chan []byte, finCh <-chan int) {
+func consolidateFileRecords(numOfClients int, recCh <-chan []byte, finCh <-chan int) fileRecords{
 	var numOfClientsCompleted int
-	//var receivedFileRecords fileRecords
+	var receivedFileRecords fileRecords
 	numOfClientsCompleted = 0
 	for{
 		if numOfClientsCompleted == numOfClients{
@@ -173,14 +219,15 @@ func consolidateFileRecords(numOfClients int, recCh <-chan []byte, finCh <-chan 
 				log.Println("numOfClientsCompleted", numOfClientsCompleted)	
 			
 			case buf := <-recCh:
-				log.Println("Received at recCh")	
+				//log.Println("Received at recCh")	
 				copy_buf := make([]byte, RecordSize)
 				copy(copy_buf, buf)
-				myFileRecords = append(myFileRecords, record{copy_buf})
+				receivedFileRecords = append(receivedFileRecords, record{copy_buf[:100]})
 				//log.Println("Added to received FR")
 		}
 	}
 	//myFileRecords = append(myFileRecords, receivedFileRecords...)
+	return receivedFileRecords
 }
 // func sendFileRecords(openConnectionsMap map[int]net.Conn, numOfServers int, myServerId int){
 // 	n_partitionBits := int(math.Log2(float64(numOfServers))) // assumed that fewer than 256 servers there. Otherwise, endianness needs to be taken care of 
@@ -221,8 +268,15 @@ func consolidateFileRecords(numOfClients int, recCh <-chan []byte, finCh <-chan 
 // }
 func sendFileRecords(conn net.Conn, fr fileRecords){
 	for i:=0; i<len(fr); i++{
-		conn.Write(fr[i].data)
+		n, err := conn.Write(fr[i].data)
+		if err != nil{
+			log.Panicln(err)
+		} 
+		if n != 100{
+			log.Panicln("File record not multiple of 100B", n)
+		}
 	}
+	time.Sleep(3 * time.Second)
 	conn.Close()
 }
 
@@ -246,7 +300,12 @@ func main() {
 	numOfClients := len(scs.Servers) - 1
 	
 	// read and partition data
-	partitionedFileRecords := readAndPartitionData(numOfClients + 1)
+	// partitionedFileRecords := readAndPartitionData(numOfClients + 1)
+	// for i:=0; i<len(partitionedFileRecords[myServerId]); i++{
+	// 	myFileRecords = append(myFileRecords, record{partitionedFileRecords[myServerId][i].data})
+	// }
+	readFileRecords := readData()
+	partitionedFileRecords := partitionData(numOfClients+1, readFileRecords)
 	myFileRecords = append(myFileRecords, partitionedFileRecords[myServerId]...)
 
 	// declare channels
@@ -267,8 +326,8 @@ func main() {
 		}
 	}
 	// consolidate file records
-	consolidateFileRecords(numOfClients, recCh, finCh)	
-
+	receivedFileRecords := consolidateFileRecords(numOfClients, recCh, finCh)	
+	myFileRecords = append(myFileRecords, receivedFileRecords...)
 	//sort file records
 	sort.Stable(fileRecords(myFileRecords))
 	
@@ -284,5 +343,4 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	fmt.Println("End of Main Loop")
 }
