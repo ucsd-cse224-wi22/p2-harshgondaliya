@@ -74,6 +74,17 @@ unless you want to retain references between copies.
 Golang provides no builtin deep copy functionality so you'll have 
 to implement your own or use one of the many freely available libraries that provide it.
 */
+
+/*
+Learnings:
+first parition data locally and then start listening to connections and sending data.
+while paritioning data rather than thinking of 2d byte slice think of storing a huge buffer for each server.
+then you can keep reading 100B records from this buffer.
+hence hashmap map[int][]byte would be great option
+it will avoid to loss of records we are experiencing in large file sizes
+
+other way is to use io.ReadFull and ensure that we always read 100B
+*/
 func readData() fileRecords{
 	var readFileRecords fileRecords
 	inputFile, err := os.Open(os.Args[2])
@@ -99,33 +110,6 @@ func readData() fileRecords{
 		readFileRecords = append(readFileRecords, record{copy_buf[:bytesRead]})
 	}
 	return readFileRecords
-	// partitionedFileRecords := make(map[int]fileRecords)
-	// for i:= 0; i<numOfServers; i++{
-	// 	partitionedFileRecords[i] = fileRecords{}
-	// }
-	// n_partitionBits := int(math.Log2(float64(numOfServers))) // assumed that fewer than 256 servers there. Otherwise, endianness needs to be taken care of 
-	// n_partitionBits := int(math.Log2(float64(numOfServers))) // assumed that fewer than 256 servers there. Otherwise, endianness needs to be taken care of 
-	// inputFile, err := os.Open(os.Args[2])
-	// if err != nil{
-	// 	log.Fatal(err)
-	// }
-	// defer inputFile.Close()
-	// buf := make([]byte, RecordSize)
-	// for {
-	// 	bytesRead, err := inputFile.Read(buf)
-	// 	if err != nil{
-	// 		if err != io.EOF { // even though the last chunk may be less than 100B, the last chunk is read successfully and then when solely EOF is encountered, we get error.EOF
-	// 			log.Panicln(err)
-	// 		}
-	// 		break
-	// 	}
-	// 	copy_buf := make([]byte, RecordSize)
-	// 	copy(copy_buf, buf[:bytesRead]) // do not pass buf every time. otherwise, you keep overwriting buf and your slice has memory ref to it. 
-	// 					 // hence, if buf is appended each time, at the end all inputFileRecords will have value equal to last entered element.
-	// 	serverKey := uint8(copy_buf[0] >> (8 - n_partitionBits))
-	// 	partitionedFileRecords[int(serverKey)] = append(partitionedFileRecords[int(serverKey)], record{copy_buf})
-	// }
-	//return partitionedFileRecords
 }
 func partitionData(numOfServers int, readFileRecords fileRecords)map[int]fileRecords{
 	partitionedFileRecords := make(map[int]fileRecords)
@@ -185,7 +169,7 @@ func listenForConnections(scs ServerConfigs, myServerId int, recCh chan<- []byte
 func handleConnection(conn net.Conn, myServerId int, recCh chan<- []byte, finCh chan<- int){
 	for{
 		buf := make([]byte, RecordSize)
-		n, err := io.ReadFull(conn, buf) // blocks until some read is done
+		n, err := io.ReadFull(conn, buf) // blocks until some read is done; VIMP: use io.ReadFull so that it always reads bytes equal to buf size
 		if err != nil{
 			if err != io.EOF{
 				log.Panicln(err)
@@ -229,43 +213,6 @@ func consolidateFileRecords(numOfClients int, recCh <-chan []byte, finCh <-chan 
 	//myFileRecords = append(myFileRecords, receivedFileRecords...)
 	return receivedFileRecords
 }
-// func sendFileRecords(openConnectionsMap map[int]net.Conn, numOfServers int, myServerId int){
-// 	n_partitionBits := int(math.Log2(float64(numOfServers))) // assumed that fewer than 256 servers there. Otherwise, endianness needs to be taken care of 
-// 	inputFile, err := os.Open(os.Args[2])
-// 	if err != nil{
-// 		log.Fatal(err)
-// 	}
-// 	defer inputFile.Close()
-// 	buf := make([]byte, RecordSize)
-// 	for {
-// 		bytesRead, err := inputFile.Read(buf)
-// 		if err != nil{
-// 			if err != io.EOF { // even though the last chunk may be less than 100B, the last chunk is read successfully and then when solely EOF is encountered, we get error.EOF
-// 				log.Panicln(err)
-// 			}
-// 			break
-// 		}
-// 		copy_buf := make([]byte, RecordSize)
-// 		copy(copy_buf, buf) // do not pass buf every time. otherwise, you keep overwriting buf and your slice has memory ref to it. 
-// 						 // hence, if buf is appended each time, at the end all inputFileRecords will have value equal to last entered element.
-// 		serverKey := uint8(copy_buf[0] >> (8 - n_partitionBits))
-// 		if int(serverKey) == myServerId{
-// 			myFileRecords = append(myFileRecords, record{copy_buf[:bytesRead]})
-// 		} else {
-// 			conn := openConnectionsMap[int(serverKey)]
-// 			conn.Write(copy_buf)
-// 			if len(copy_buf) != 100{
-// 				log.Println("length not 100B for my own record")
-// 			}
-// 		}
-// 	}
-// 	for i:=0; i<numOfServers; i++{
-// 		if i!= myServerId{
-// 			conn := openConnectionsMap[i]
-// 			conn.Close() // I need to close the chanel because my results are dependent on that
-// 		}          // only after I close connection, finCh will get triggered
-// 	}
-// }
 func sendFileRecords(conn net.Conn, fr fileRecords){
 	for i:=0; i<len(fr); i++{
 		n, err := conn.Write(fr[i].data)
@@ -300,10 +247,7 @@ func main() {
 	numOfClients := len(scs.Servers) - 1
 	
 	// read and partition data
-	// partitionedFileRecords := readAndPartitionData(numOfClients + 1)
-	// for i:=0; i<len(partitionedFileRecords[myServerId]); i++{
-	// 	myFileRecords = append(myFileRecords, record{partitionedFileRecords[myServerId][i].data})
-	// }
+	
 	readFileRecords := readData()
 	partitionedFileRecords := partitionData(numOfClients+1, readFileRecords)
 	myFileRecords = append(myFileRecords, partitionedFileRecords[myServerId]...)
