@@ -1,7 +1,7 @@
 # **Distributed Sort**
 
 <p align="center">
-  <img src="https://github.com/ucsd-cse224-wi22/p2-harshgondaliya/blob/main/distributed-sort.PNG" style="height: auto; width: 700px">
+  <img src="https://github.com/ucsd-cse224-wi22/p2-harshgondaliya/blob/main/distributed-sort.PNG" style="width: auto; height: 400px">
 </p>
 
 ### The basic sort specifications
