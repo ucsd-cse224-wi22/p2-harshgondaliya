@@ -1,30 +1,10 @@
-# **Project 2 : Distributed Sort**
-CSE 224 Winter 2022 Project 2 Starter Code
+# **Distributed Sort**
 
----
+<p align="center">
+  <img src="https://github.com/ucsd-cse224-wi22/p2-harshgondaliya/blob/main/distributed-sort.PNG" style="height: auto; width: 700px">
+</p>
 
-## About the project
-The starter-code in this repository contains some utilities and some
-initial code in the source `netsort.go` file that you will use to create
-a **distributed sort** program. This is an extension of the sort program
-you had implemented in project 1 to a distributed peer-to-peer framework.
-In the starter code, you are provided with a docker-compose file with 4
-servers that each run the `netsort` routine.   
-The final output will be a sorted file of records for each server with a
-set of records from its own input list augmented with a fraction of records
-from each of the other servers.
-
-The main objective of this project is for you  to get familiarized with 
-basic socket level programming, handling servers and clients, some popular 
-concurrency control methods that golang provides natively and some functional 
-knowledge of Docker. The starter-code, however, provides all implementation of 
-Docker/docker-compose that you will need to get your code up and running. 
-
----
-
-## Distributed Sort specifications
-
-- ### The basic sort specifications
+### The basic sort specifications
   This project will read, sort, and write files consisting of zero or
   more records. A record is a 100 byte binary key-value pair, consisting
   of a 10-byte key and a 90-byte value. Each key should be interpreted
@@ -32,7 +12,7 @@ Docker/docker-compose that you will need to get your code up and running.
   meaning that the output should have the record with the smallest key first,
   then the second-smallest, etc.
 
-- ### Distributed program specifications
+### Distributed program specifications
   Complete the `netsort.go` program that will concurrently run on multiple machines. The program
   should broadly have the following architecture/specs :  
   - read the input file,
@@ -42,14 +22,14 @@ Docker/docker-compose that you will need to get your code up and running.
   - sort the data,
   - write the sorted data to the output file
 
-- ### Input params to `netsort`
+### Input params to `netsort`
   Usage : `netsort <serverId> <inputFilePath> <outputFilePath> <configFilePath>`
   + **serverId** : integer-valued id starting from 0. For example, if there are 4 servers, they would have ids 0, 1, 2, 3.
   + **inputFilePath** : input file path of a particular server of the form `path/to/input-{serverId}.dat`.
   + **outputFilePath** : input file path of a particular server of the form `path/to/output-{serverId}.dat`.
   + **configFilePath** : path to the config file of the form `path/to/server.yaml`
 
-- ### Basic assumptions of the distributed nature of the application
+### Basic assumptions of the distributed nature of the application
   1. **Number of servers** : We make a simplifying assumption that, at a time, the number of machines running `netsort.go` would be a power of 2.
      For example, there could be 2, 4, 8 ... machines running the same program to sort the input data. 
      Finally, it is the number of servers defined in the config (`servers.yaml`) that determines this. 
@@ -68,46 +48,7 @@ Docker/docker-compose that you will need to get your code up and running.
   4. For large data transfers, it's usually a good idea to make sure there are no 
      race conditions when accepting data otherwise you may face all sorts of issues related to concurrency.
 
-- ### Dealing with sockets
-  - You will be required to use the [net package](https://pkg.go.dev/net) that go provides
-    to listen/serve data from peers and also send data to peers.
-  - The `config/server.yaml` file is already being read as part of the starter code into
-    the `netsort` routine. Use the host/port specs to open socket connections. <br>
-
----
-
-### What is being provided as part of the starter code.
-- **Input/Output files** :
-  To do a functional verification of your `netsort` routine, you can use the `gensort` utility being provided along with 
-  the starter-code. We are providing you with testcase1 input in the `dist/testcase1` folder.
-  - **testcase1**
-    + Input  : `dist/testcase1/input-0.dat`, `dist/testcase1/input-1.dat`, `dist/testcase1/input-2.dat`, `dist/testcase1/input-3.dat`
-    + Config : config/servers.yaml
-- **Dockerfile** : This generates the docker image that would be used to run your `netsort` routine. 
-   This does not need to be altered.
-- **docker-compose.yml** : This specifies a docker network of 4 servers that run your `netsort` routine. 
-  You are free to play around with this file by changing the environment variables to test your program with different types of input.
-  - `SERVER_ID`, `INPUT_FILE_PATH`, `OUTPUT_FILE_PATH`, `CONFIG_FILE_PATH` are the variables that get passed as `os Args` to your `netsort` routine.
-  The default values defined in `docker-compose.yml` correspond to the testcase1.
-- **Utilities** : The utilities from `project 1` are being provided in `project 2` as well 
-  to make it easier for you to test your code.
-  - `Gensort` <br/>
-    `Gensort` generates random input. If the 'randseed' parameter is provided, the given seed is used to ensure deterministic output.
-    'size' can be provided as a non-negative integer to generate that many bytes of output. However human-readable strings can be used as well, such as "10 mb" for 10 megabytes, "1 gb" for one gigabyte", "256 kb" for 256 kilobytes, etc. 
-    If the specified size is not a multiple of 100 bytes, the requested size will be rounded up to the next multiple of 100. 
-    ```Usage: bin/gensort outputfile size -randseed int Random seed```
-
-  - `Showsort` <br/>
-    `Showsort` shows the records in the provided file in a human-readable format, with the key followed by a space followed by an abbreviated version of the value. 
-     ```Usage: bin/showsort inputfile```
-
-  - `Valsort` <br/>
-    `Valsort` scans the provided input file to check if it is sorted.
-    ```Usage: bin/valsort inputfile```
-  
----
-
-## Building and running the program | Some basic docker commands
+### Building and running the program | Some basic docker commands
 Building the Docker image
 (From inside the `root` directory, i.e. wherever your Dockerfile exists)
 ```
@@ -175,9 +116,8 @@ docker stop <CONTAINER_ID | CONTAINER_NAME>
 docker rm <CONTAINER_ID | CONTAINER_NAME>
 ```
 
----
 
-## Environment requirements and setup
+### Environment requirements and setup
 1. Install and setup [Docker desktop](https://docs.docker.com/engine/install/) on your machine.
 2. Install and setup [docker-compose](https://docs.docker.com/compose/install/). It comes bundled with `docker-desktop` for `macOS`.  
 
@@ -186,7 +126,7 @@ the corresponding executable binary paths must have been added to the System Pat
   
 ---
   
-## Verifying your sort implementation
+### Verifying your sort implementation
   
 There are a few ways to check that your program is correct.  Here are two possibilities, though of course you might think of others.
 
@@ -210,18 +150,8 @@ $ cat output-2.dat >> OUTPUT
 $ cat output-3.dat >> OUTPUT
 ```
 
-### Method 1: Using Project 1 sort
-  
-You can use your project 1 sort code to verify if your output is correct
-  
-```
-$ bin/sort INPUT REF_OUTPUT
-$ diff REF_OUTPUT OUTPUT
-```
 
-The output of your P1 sort code should equal the output of your P2 netsort
-
-### Method 2: Using showsort
+### Method 1: Using showsort
 
 ```
 $ bin/showsort INPUT | sort > REF_OUTPUT
@@ -229,4 +159,4 @@ $ diff REF_OUTPUT OUTPUT
 ```
 
 
-In both cases, you are simply comparing a sort of a concatenation of the input files with a concatenation of the output files.
+In both cases, you are simply comparing a sort of concatenation of the input files with a concatenation of the output files.
